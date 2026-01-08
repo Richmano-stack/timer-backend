@@ -1,17 +1,20 @@
-require("dotenv").config();
-const { Pool } = require("pg");
+import dotenv from "dotenv";
+import pg from "pg";
 
-const pool = new Pool({
+dotenv.config();
+const { Pool } = pg;
+
+export const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
 });
 
-const initDb = async () => {
+export const initDb = async () => {
     try {
         await pool.query(`
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
                 username TEXT UNIQUE NOT NULL,
-                password TEXT NOT NULL,
+                password_hash TEXT NOT NULL,
                 first_name TEXT NOT NULL,
                 last_name TEXT NOT NULL,
                 current_status TEXT DEFAULT 'available', -- 'on_production', 'lunch_break', 'away'
@@ -31,7 +34,5 @@ const initDb = async () => {
         console.error(err);
     }
 };
-
-module.exports = { pool, initDb };
 
 

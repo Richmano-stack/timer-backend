@@ -1,9 +1,10 @@
-const express = require("express");
+import express from "express";
+import * as statusController from "../controllers/statusController.js";
+import auth from "../middleware/auth.js";
+
 const router = express.Router();
-const statusController = require("../controllers/statusController");
-const auth = require("../middleware/auth");
 
 router.post("/change", auth, statusController.changeStatus);
 router.get("/history", auth, statusController.getHistory);
 
-module.exports = router;
+export default router;

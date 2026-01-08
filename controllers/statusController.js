@@ -1,6 +1,6 @@
-const { pool } = require("../db");
+import { pool } from "../db.js";
 
-exports.changeStatus = async (req, res) => {
+export const changeStatus = async (req, res) => {
     const { status } = req.body;
     const userId = req.user.id;
 
@@ -37,7 +37,7 @@ exports.changeStatus = async (req, res) => {
     }
 };
 
-exports.getHistory = async (req, res) => {
+export const getHistory = async (req, res) => {
     const userId = req.user.id;
 
     try {

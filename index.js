@@ -1,15 +1,16 @@
-require("dotenv").config();
-const express = require("express");
+import dotenv from "dotenv";
+import express from "express";
+import { initDb } from "./db.js";
+import authRoutes from "./routes/auth.js";
+import statusRoutes from "./routes/status.js";
+
+dotenv.config();
 const app = express();
-const { initDb } = require("./db");
 
 // Middleware
 app.use(express.json());
 
 // Routes
-const authRoutes = require("./routes/auth");
-const statusRoutes = require("./routes/status");
-
 app.use("/api/auth", authRoutes);
 app.use("/api/status", statusRoutes);
 

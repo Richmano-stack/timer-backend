@@ -1,8 +1,9 @@
+import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { pool } from "../db.js";
 
-export const register = async (req, res) => {
+export const register = async (req: Request, res: Response) => {
     const { username, password, firstName, lastName } = req.body;
 
     try {
@@ -18,7 +19,7 @@ export const register = async (req, res) => {
     }
 };
 
-export const login = async (req, res) => {
+export const login = async (req: Request, res: Response) => {
     const { username, password } = req.body;
 
     try {
@@ -29,9 +30,11 @@ export const login = async (req, res) => {
             return res.status(401).json({ error: "Invalid credentials" });
         }
 
-        const token = jwt.sign({ id: user.id, username: user.username }, process.env.JWT_SECRET, {
-            expiresIn: "1h",
-        });
+        const token = jwt.sign(
+            { id: user.id, username: user.username },
+            process.env.JWT_SECRET as string,
+            { expiresIn: "1h" }
+        );
 
         res.json({ token });
     } catch (err) {

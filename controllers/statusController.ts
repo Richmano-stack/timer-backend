@@ -1,6 +1,8 @@
+import { Response } from "express";
 import { pool } from "../db.js";
+import { AuthRequest } from "../middleware/auth.js";
 
-export const changeStatus = async (req, res) => {
+export const changeStatus = async (req: AuthRequest, res: Response) => {
     const { status } = req.body;
     const userId = req.user.id;
 
@@ -37,7 +39,7 @@ export const changeStatus = async (req, res) => {
     }
 };
 
-export const getHistory = async (req, res) => {
+export const getHistory = async (req: AuthRequest, res: Response) => {
     const userId = req.user.id;
 
     try {

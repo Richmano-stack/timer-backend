@@ -105,15 +105,96 @@ export const stopStatus = async (req: AuthRequest, res: Response) => {
 
 export const getHistory = async (req: AuthRequest, res: Response) => {
     const userId = req.user.id;
+    const { from, to } = req.query;
 
     try {
-        const { rows } = await pool.query(
-            "SELECT * FROM status_logs WHERE user_id = $1 ORDER BY start_time DESC",
-            [userId]
-        );
+        let query = "SELECT * FROM status_logs WHERE user_id = $1";
+        const params: any[] = [userId];
+
+        if (from) {
+            params.push(from);
+            query += ` AND start_time >= $${params.length}`;
+        }
+        if (to) {
+            params.push(to);
+            query += ` AND start_time <= $${params.length}`;
+        }
+
+        query += " ORDER BY start_time DESC";
+
+        const { rows } = await pool.query(query, params);
         res.json(rows);
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Failed to fetch history" });
+    }
+};
+
+export const getSummary = async (req: AuthRequest, res: Response) => {
+    const userId = req.user.id;
+    const { from, to } = req.query;
+
+    try {
+        // Default to last 7 days if no range provided
+        const defaultFrom = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        const startTime = from ? parseInt(from as string) : defaultFrom;
+        const endTime = to ? parseInt(to as string) : Date.now();
+
+        const { rows } = await pool.query(
+            `SELECT status_name, SUM(duration_ms) as total_duration 
+             FROM status_logs 
+             WHERE user_id = $1 AND start_time >= $2 AND start_time <= $3 
+             GROUP BY status_name`,
+            [userId, startTime, endTime]
+        );
+
+        res.json({
+            period: { from: startTime, to: endTime },
+            summary: rows
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to fetch summary" });
+    }
+};
+
+export const exportLogs = async (req: AuthRequest, res: Response) => {
+    const userId = req.user.id;
+    const { from, to } = req.query;
+
+    try {
+        let query = "SELECT status_name, start_time, end_time, duration_ms FROM status_logs WHERE user_id = $1";
+        const params: any[] = [userId];
+
+        if (from) {
+            params.push(from);
+            query += ` AND start_time >= $${params.length}`;
+        }
+        if (to) {
+            params.push(to);
+            query += ` AND start_time <= $${params.length}`;
+        }
+
+        query += " ORDER BY start_time DESC";
+
+        const { rows } = await pool.query(query, params);
+
+        // Convert to CSV
+        const headers = ["Status", "Start Time", "End Time", "Duration (ms)"];
+        const csvRows = rows.map(row => [
+            row.status_name,
+            new Date(parseInt(row.start_time)).toISOString(),
+            row.end_time ? new Date(parseInt(row.end_time)).toISOString() : "Active",
+            row.duration_ms || 0
+        ].join(","));
+
+        const csvContent = [headers.join(","), ...csvRows].join("\n");
+
+        res.setHeader("Content-Type", "text/csv");
+        res.setHeader("Content-Disposition", "attachment; filename=status_logs.csv");
+        res.status(200).send(csvContent);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to export logs" });
     }
 };

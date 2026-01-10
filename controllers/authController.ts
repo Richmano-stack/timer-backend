@@ -77,8 +77,12 @@ export const login = async (req: Request, res: Response) => {
             return res.status(401).json({ error: "Invalid credentials" });
         }
 
+        if (!user.is_active) {
+            return res.status(403).json({ error: "Account is deactivated" });
+        }
+
         const token = jwt.sign(
-            { id: user.id, username: user.username },
+            { id: user.id, username: user.username, role: user.role },
             process.env.JWT_SECRET as string,
             { expiresIn: "1h" }
         );
@@ -120,8 +124,12 @@ export const refreshToken = async (req: Request, res: Response) => {
         const { rows: userRows } = await pool.query("SELECT * FROM users WHERE id = $1", [userId]);
         const user = userRows[0];
 
+        if (!user.is_active) {
+            return res.status(403).json({ error: "Account is deactivated" });
+        }
+
         const newToken = jwt.sign(
-            { id: user.id, username: user.username },
+            { id: user.id, username: user.username, role: user.role },
             process.env.JWT_SECRET as string,
             { expiresIn: "1h" }
         );
@@ -148,7 +156,7 @@ export const logout = async (req: Request, res: Response) => {
 export const getMe = async (req: AuthRequest, res: Response) => {
     try {
         const { rows } = await pool.query(
-            "SELECT id, username, email, first_name, last_name, current_status, created_at FROM users WHERE id = $1",
+            "SELECT id, username, email, first_name, last_name, current_status, role, is_active, created_at FROM users WHERE id = $1",
             [req.user.id]
         );
 

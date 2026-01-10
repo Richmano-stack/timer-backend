@@ -29,6 +29,14 @@ export const initDb = async () => {
                 ELSE
                     ALTER TABLE users ALTER COLUMN email SET NOT NULL;
                 END IF;
+
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='role') THEN
+                    ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'agent';
+                END IF;
+
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='is_active') THEN
+                    ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT true;
+                END IF;
             END $$;
             
             CREATE TABLE IF NOT EXISTS status_logs (

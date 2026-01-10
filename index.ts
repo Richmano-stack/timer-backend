@@ -4,9 +4,15 @@ import { initDb } from "./db.js";
 import authRoutes from "./routes/auth.js";
 import statusRoutes from "./routes/status.js";
 import adminRoutes from "./routes/admin.js";
+import cors from "cors";
 
 dotenv.config();
 const app = express();
+
+app.use(cors({
+    origin: "http://localhost:3000",
+    credentials: true
+}));
 
 // Middleware
 app.use(express.json());

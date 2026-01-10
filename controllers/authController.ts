@@ -48,9 +48,9 @@ export const register = async (req: Request, res: Response) => {
         );
 
         res.status(201).json(rows[0]);
-    } catch (err: any) {
+    } catch (err: unknown) {
         // 5. Error Handling
-        if (err.code === "23505") {
+        if (err && typeof err === "object" && "code" in err && err.code === "23505") {
             return res.status(400).json({ error: "Username already exists" });
         }
         console.error(err);
@@ -154,6 +154,7 @@ export const logout = async (req: Request, res: Response) => {
 };
 
 export const getMe = async (req: AuthRequest, res: Response) => {
+    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
     try {
         const { rows } = await pool.query(
             "SELECT id, username, email, first_name, last_name, current_status, role, is_active, created_at FROM users WHERE id = $1",
@@ -172,12 +173,13 @@ export const getMe = async (req: AuthRequest, res: Response) => {
 };
 
 export const updateProfile = async (req: AuthRequest, res: Response) => {
+    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
     const { firstName, lastName, email, password } = req.body;
     const userId = req.user.id;
 
     try {
         let query = "UPDATE users SET first_name = $1, last_name = $2, email = $3";
-        const params: any[] = [firstName, lastName, email];
+        const params: unknown[] = [firstName, lastName, email];
 
         if (password) {
             const hashedPassword = await bcrypt.hash(password, 10);

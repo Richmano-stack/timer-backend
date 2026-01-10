@@ -4,6 +4,7 @@ import { pool } from "../db.js";
 import { AuthRequest } from "../middleware/auth.js";
 
 export const getTeamStatus = async (req: AuthRequest, res: Response) => {
+    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
     try {
         const { rows } = await pool.query(
             "SELECT id, username, first_name, last_name, current_status, role FROM users WHERE is_active = true ORDER BY first_name ASC"
@@ -16,6 +17,7 @@ export const getTeamStatus = async (req: AuthRequest, res: Response) => {
 };
 
 export const getAllUsers = async (req: AuthRequest, res: Response) => {
+    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
     try {
         const { rows } = await pool.query(
             "SELECT id, username, email, first_name, last_name, role, is_active, created_at FROM users ORDER BY created_at DESC"
@@ -41,8 +43,8 @@ export const createUser = async (req: Request, res: Response) => {
             [username, email, hashedPassword, firstName, lastName, role || 'agent']
         );
         res.status(201).json(rows[0]);
-    } catch (err: any) {
-        if (err.code === "23505") {
+    } catch (err: unknown) {
+        if (err && typeof err === "object" && "code" in err && err.code === "23505") {
             return res.status(400).json({ error: "Username or email already exists" });
         }
         console.error(err);

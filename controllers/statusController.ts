@@ -6,6 +6,7 @@ import { z } from "zod";
 const StatusSchema = z.enum(["available", "lunch_break", "on_production", "away", "meeting", "short_break", "training", "off_duty"]);
 
 export const changeStatus = async (req: AuthRequest, res: Response) => {
+    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
     const { status } = req.body;
     const userId = req.user.id;
 
@@ -52,6 +53,7 @@ export const changeStatus = async (req: AuthRequest, res: Response) => {
 };
 
 export const getCurrentStatus = async (req: AuthRequest, res: Response) => {
+    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
     const userId = req.user.id;
 
     try {
@@ -72,6 +74,7 @@ export const getCurrentStatus = async (req: AuthRequest, res: Response) => {
 };
 
 export const stopStatus = async (req: AuthRequest, res: Response) => {
+    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
     const userId = req.user.id;
 
     try {
@@ -104,12 +107,13 @@ export const stopStatus = async (req: AuthRequest, res: Response) => {
 };
 
 export const getHistory = async (req: AuthRequest, res: Response) => {
+    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
     const userId = req.user.id;
     const { from, to } = req.query;
 
     try {
         let query = "SELECT * FROM status_logs WHERE user_id = $1";
-        const params: any[] = [userId];
+        const params: unknown[] = [userId];
 
         if (from) {
             params.push(from);
@@ -131,6 +135,7 @@ export const getHistory = async (req: AuthRequest, res: Response) => {
 };
 
 export const getSummary = async (req: AuthRequest, res: Response) => {
+    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
     const userId = req.user.id;
     const { from, to } = req.query;
 
@@ -159,12 +164,13 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
 };
 
 export const exportLogs = async (req: AuthRequest, res: Response) => {
+    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
     const userId = req.user.id;
     const { from, to } = req.query;
 
     try {
         let query = "SELECT status_name, start_time, end_time, duration_ms FROM status_logs WHERE user_id = $1";
-        const params: any[] = [userId];
+        const params: unknown[] = [userId];
 
         if (from) {
             params.push(from);

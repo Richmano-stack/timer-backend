@@ -8,18 +8,18 @@ This document outlines the planned features and improvements for the Timer Backe
 - [x] **Refresh Tokens**: Implement a refresh token mechanism to keep users logged in securely beyond the 1-hour JWT expiration.
 
 ## 2. Enhanced Status Tracking
-- [ ] **GET `/api/status/current`**: Retrieve the currently active status log. Essential for frontend synchronization on page refresh.
-- [ ] **Status Validation**: Implement validation (e.g., using Zod) to ensure only allowed status names (e.g., `available`, `lunch_break`, `on_production`) are accepted.
-- [ ] **Manual Stop**: Add an endpoint to end the current status without starting a new one (e.g., for end-of-shift).
+- [x] **GET `/api/status/current`**: Retrieve the currently active status log. Essential for frontend synchronization on page refresh.
+- [x] **Status Validation**: Implement validation (e.g., using Zod) to ensure only allowed status names (e.g., `available`, `lunch_break`, `on_production`) are accepted.
+- [x] **Manual Stop**: Add an endpoint to end the current status without starting a new one (e.g., for end-of-shift).
 
 ## 3. Analytics & Reporting
-- [ ] **GET `/api/status/summary`**: Provide a daily/weekly summary of time spent in each status.
-- [ ] **History Filtering**: Add query parameters to `/api/status/history` (e.g., `?from=...&to=...`) for date-range reporting.
-- [ ] **Export Feature**: Endpoint to export logs as CSV or JSON for external reporting.
+- [x] **GET `/api/status/summary`**: Provide a daily/weekly summary of time spent in each status.
+- [x] **History Filtering**: Add query parameters to `/api/status/history` (e.g., `?from=...&to=...`) for date-range reporting.
+- [x] **Export Feature**: Endpoint to export logs as CSV or JSON for external reporting.
 
 ## 4. Admin & Team Features
-- [ ] **Supervisor Dashboard**: Endpoints to view the real-time status of all team members.
-- [ ] **User Management**: Admin endpoints to create, update, or deactivate user accounts.
+- [x] **Supervisor Dashboard**: Endpoints to view the real-time status of all team members.
+- [x] **User Management**: Admin endpoints to create, update, or deactivate user accounts.
 
 ## 5. Technical Improvements
 - [ ] **CORS Configuration**: Setup `cors` middleware to allow requests from the frontend domain.

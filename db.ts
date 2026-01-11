@@ -79,4 +79,5 @@ export const initDb = async () => {
     }
 }
 
+// Automatically initialize DB when this module is loaded (optional, but kept for consistency)
 initDb();

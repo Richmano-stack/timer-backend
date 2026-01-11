@@ -187,7 +187,7 @@ export const exportLogs = async (req: AuthRequest, res: Response) => {
 
         // Convert to CSV
         const headers = ["Status", "Start Time", "End Time", "Duration (ms)"];
-        const csvRows = rows.map(row => [
+        const csvRows = rows.map((row: { status_name: string, start_time: string, end_time: string | null, duration_ms: string | null }) => [
             row.status_name,
             new Date(parseInt(row.start_time)).toISOString(),
             row.end_time ? new Date(parseInt(row.end_time)).toISOString() : "Active",

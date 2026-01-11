@@ -28,11 +28,11 @@ export const register = async (req: Request, res: Response) => {
         if (existingEmails.length > 0) {
             // Extract suffixes and find the next available number
             const suffixes = existingEmails
-                .map(row => {
+                .map((row: { email: string }) => {
                     const match = row.email.match(new RegExp(`${baseEmailPrefix}(\\d+)${domain}`));
-                    return match ? parseInt(match[1]) : 1;
+                    return match ? parseInt(match[1]!) : 1;
                 })
-                .filter(n => !isNaN(n));
+                .filter((n: number) => !isNaN(n));
 
             const maxSuffix = suffixes.length > 0 ? Math.max(...suffixes) : 1;
             email = `${baseEmailPrefix}${maxSuffix + 1}${domain}`;

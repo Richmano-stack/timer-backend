@@ -58,6 +58,12 @@ export const initDb = async () => {
             )
         `)
 
+        // Enforce email uniqueness
+        await pool.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique
+        ON users(email)
+        `);
+
         await pool.query(`CREATE TABLE IF NOT EXISTS status_logs (
             id SERIAL PRIMARY KEY,
             user_id INT NOT NULL,

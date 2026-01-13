@@ -1,3 +1,36 @@
+/**
+ * CHALLENGE 3: AUTH CONTROLLER - MULTI-STEP LOGIC
+ * * * 1. REGISTER FUNCTION:
+ * - Validate existence of: username, password, firstName, lastName.
+ * - EMAIL GENERATION LOGIC:
+ * a. Create prefix: "firstname.lastname".
+ * b. Query DB for existing emails matching this prefix.
+ * c. If exists, extract numeric suffixes, find max, and increment (e.g., name.name2@company.com).
+ * d. If not exists, use base prefix.
+ * - SECURITY: Hash password with salt rounds (10).
+ * - DATA: INSERT into users using RETURNING to get the new object without the password.
+ * - ERROR: Handle Postgres code "23505" for unique constraint (username).
+ * * * 2. LOGIN FUNCTION:
+ * - Accept 'identifier' (can be username OR email) and password.
+ * - DB: Query users where username = $1 OR email = $1.
+ * - VALIDATION: 
+ * a. Compare passwords using bcrypt.
+ * b. Check if 'user.is_active' is true.
+ * - TOKENS:
+ * a. Sign Access Token (JWT) with id, username, and role (Expires 1h).
+ * b. Generate Refresh Token using 'crypto.randomBytes(40)'.
+ * c. Store Refresh Token in 'refresh_tokens' table with a 7-day expiry.
+ * * * 3. TOKEN MANAGEMENT:
+ * - REFRESH: Validate token exists and 'expires_at > NOW()'. Re-sign new Access Token.
+ * - LOGOUT: Delete the specific refresh token from the database.
+ * * * 4. PROFILE LOGIC:
+ * - GET_ME: Fetch full user profile based on the 'req.user.id' from middleware.
+ * - UPDATE: Build a dynamic SQL query to update names/email. Only hash and update password if provided.
+ */
+
+// START CODING HERE...
+
+
 import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -8,65 +41,59 @@ import { AuthRequest } from "../middleware/auth.js";
 export const register = async (req: Request, res: Response) => {
     const { username, password, firstName, lastName } = req.body;
 
-    // 1. Validation
     if (!username || !password || !firstName || !lastName) {
-        return res.status(400).json({ error: "Missing required fields: username, password, firstName, lastName" });
+        return res.status(400).json({ error: "All fields are required" })
     }
 
     try {
-        // 2. Automatic Email Generation Logic
-        const baseEmailPrefix = `${firstName.toLowerCase()}.${lastName.toLowerCase()}`;
-        const domain = "@xcompany.com";
+        const baseEmailPrefix = `${firstName.toLowerCase()}.${lastName.toLowerCase()}}`;
+        const domain = "@company.com";
 
-        // Find existing emails with the same prefix to handle collisions
-        const { rows: existingEmails } = await pool.query(
+        const result = await pool.query(
             "SELECT email FROM users WHERE email LIKE $1",
             [`${baseEmailPrefix}%${domain}`]
         );
 
+        const existingEmails = result.rows;
         let email = `${baseEmailPrefix}${domain}`;
         if (existingEmails.length > 0) {
-            // Extract suffixes and find the next available number
-            const suffixes = existingEmails
-                .map((row: { email: string }) => {
-                    const match = row.email.match(new RegExp(`${baseEmailPrefix}(\\d+)${domain}`));
-                    return match ? parseInt(match[1]!) : 1;
-                })
-                .filter((n: number) => !isNaN(n));
 
-            const maxSuffix = suffixes.length > 0 ? Math.max(...suffixes) : 1;
+            const suffixes = existingEmails.map(row => {
+                const match = row.email.match(new RegExp(`${baseEmailPrefix}(\\d+)?${domain}`));
+                return match ? parseInt(match[1]) : 1;
+            }).filter(n => !isNaN(n));
+
+            const maxSuffix = Math.max(...suffixes);
             email = `${baseEmailPrefix}${maxSuffix + 1}${domain}`;
         }
 
-        // 3. Security: Hash Password
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // 4. Data Integrity: Insert with RETURNING
         const { rows } = await pool.query(
             "INSERT INTO users (username, email, password_hash, first_name, last_name) VALUES ($1, $2, $3, $4, $5) RETURNING id, username, email, first_name, last_name",
             [username, email, hashedPassword, firstName, lastName]
         );
 
         res.status(201).json(rows[0]);
+
     } catch (err: unknown) {
-        // 5. Error Handling
         if (err && typeof err === "object" && "code" in err && err.code === "23505") {
-            return res.status(400).json({ error: "Username already exists" });
+            return res.status(400).json({ error: "Username or email already exists" });
         }
         console.error(err);
-        res.status(500).json({ error: "Registration failed" });
+        res.status(500).json({ error: "User creation failed" });
     }
 };
 
+
 export const login = async (req: Request, res: Response) => {
-    const { identifier, password } = req.body; // 'identifier' can be username or email
+    const { identifier, password } = req.body;
 
     if (!identifier || !password) {
-        return res.status(400).json({ error: "Identifier (username/email) and password are required" });
+        return res.status(400).json({ error: "All fields are required" })
     }
 
     try {
-        // Search by username OR email
         const { rows } = await pool.query(
             "SELECT * FROM users WHERE username = $1 OR email = $1",
             [identifier]
@@ -74,22 +101,21 @@ export const login = async (req: Request, res: Response) => {
         const user = rows[0];
 
         if (!user || !(await bcrypt.compare(password, user.password_hash))) {
-            return res.status(401).json({ error: "Invalid credentials" });
+            return res.status(401).json({ error: "Invalid credentials" })
         }
 
         if (!user.is_active) {
-            return res.status(403).json({ error: "Account is deactivated" });
+            return res.status(401).json({ error: "User is not active" })
         }
 
-        const token = jwt.sign(
-            { id: user.id, username: user.username, role: user.role },
-            process.env.JWT_SECRET as string,
-            { expiresIn: "1h" }
-        );
+        const token = jwt.sign({ id: user.id, username: user.username, role: user.role },
+            process.env.ACCESS_TOKEN_SECRET as string, {
+            expiresIn: "1h"
+        });
 
         const refreshToken = crypto.randomBytes(40).toString("hex");
         const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
+        expiresAt.setDate(expiresAt.getDate() + 7);
 
         await pool.query(
             "INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)",
@@ -97,18 +123,20 @@ export const login = async (req: Request, res: Response) => {
         );
 
         res.json({ token, refreshToken });
-    } catch (err) {
-        console.error(err);
+    } catch (error) {
+        console.error(error);
         res.status(500).json({ error: "Login failed" });
     }
+
+
 };
 
 export const refreshToken = async (req: Request, res: Response) => {
     const { refreshToken } = req.body;
 
     if (!refreshToken) {
-        return res.status(400).json({ error: "Refresh token is required" });
-    }
+        return res.status(400).json({ error: "Refresh token is required" })
+    };
 
     try {
         const { rows } = await pool.query(
@@ -117,70 +145,79 @@ export const refreshToken = async (req: Request, res: Response) => {
         );
 
         if (rows.length === 0) {
-            return res.status(401).json({ error: "Invalid or expired refresh token" });
-        }
+            return res.status(401).json({ error: "Invalid refresh token" })
+        };
 
         const userId = rows[0].user_id;
-        const { rows: userRows } = await pool.query("SELECT * FROM users WHERE id = $1", [userId]);
+        const { rows: userRows } = await pool.query(
+            "SELECT * FROM users WHERE id = $1",
+            [userId]
+        );
+
         const user = userRows[0];
 
         if (!user.is_active) {
-            return res.status(403).json({ error: "Account is deactivated" });
+            return res.status(401).json({ error: "User is not active" })
         }
 
-        const newToken = jwt.sign(
-            { id: user.id, username: user.username, role: user.role },
-            process.env.JWT_SECRET as string,
-            { expiresIn: "1h" }
-        );
+        const newToken = jwt.sign({ id: user.id, username: user.username, role: user.role },
+            process.env.ACCESS_TOKEN_SECRET as string, {
+            expiresIn: "1h"
+        });
 
         res.json({ token: newToken });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Token refresh failed" });
+
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Refresh token failed" });
     }
-};
+}
+
 
 export const logout = async (req: Request, res: Response) => {
     const { refreshToken } = req.body;
 
     try {
-        await pool.query("DELETE FROM refresh_tokens WHERE token = $1", [refreshToken]);
-        res.json({ message: "Logged out successfully" });
-    } catch (err) {
-        console.error(err);
+        await pool.query(
+            "DELETE FROM refresh_tokens WHERE token = $1",
+            [refreshToken]
+        );
+        res.json({ message: "Logout successful" });
+    } catch (error) {
+        console.error(error);
         res.status(500).json({ error: "Logout failed" });
     }
-};
+}
 
-export const getMe = async (req: AuthRequest, res: Response) => {
-    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+
+export const getMe = async (re: AuthRequest, res: Response) => {
+    if (!re.user) return res.status(401).json({ error: "Unauthorized" });
     try {
         const { rows } = await pool.query(
-            "SELECT id, username, email, first_name, last_name, current_status, role, is_active, created_at FROM users WHERE id = $1",
-            [req.user.id]
+            "SELECT id, username, email, first_name, current_status, role, is_active, created_at FROM users WHERE id = $1",
+            [re.user.id]
         );
 
         if (rows.length === 0) {
-            return res.status(404).json({ error: "User not found" });
+            return res.status(404).json({ error: "User not found" })
         }
 
         res.json(rows[0]);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to fetch user data" });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Failed to fetch user" });
     }
+
 };
 
 export const updateProfile = async (req: AuthRequest, res: Response) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
     const { firstName, lastName, email, password } = req.body;
     const userId = req.user.id;
-
     try {
         let query = "UPDATE users SET first_name = $1, last_name = $2, email = $3";
         const params: unknown[] = [firstName, lastName, email];
-
         if (password) {
             const hashedPassword = await bcrypt.hash(password, 10);
             query += ", password_hash = $4 WHERE id = $5";
@@ -192,8 +229,8 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
 
         const { rows } = await pool.query(query + " RETURNING id, username, email, first_name, last_name", params);
         res.json(rows[0]);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Profile update failed" });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Failed to update user" });
     }
-};
+}

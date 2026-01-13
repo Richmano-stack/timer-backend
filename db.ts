@@ -24,10 +24,20 @@ export const initDb = async () => {
 
             DO $$ 
             BEGIN 
+                -- Ensure email column exists and is unique
                 IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='email') THEN
                     ALTER TABLE users ADD COLUMN email TEXT UNIQUE NOT NULL;
                 ELSE
                     ALTER TABLE users ALTER COLUMN email SET NOT NULL;
+                    -- Add unique constraint if it doesn't exist
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.constraint_column_usage WHERE table_name = 'users' AND column_name = 'email' AND constraint_name = 'users_email_key') THEN
+                        ALTER TABLE users ADD CONSTRAINT users_email_key UNIQUE (email);
+                    END IF;
+                END IF;
+
+                -- Ensure username is unique (if not already handled by CREATE TABLE)
+                IF NOT EXISTS (SELECT 1 FROM information_schema.constraint_column_usage WHERE table_name = 'users' AND column_name = 'username' AND constraint_name = 'users_username_key') THEN
+                    ALTER TABLE users ADD CONSTRAINT users_username_key UNIQUE (username);
                 END IF;
 
                 IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='role') THEN

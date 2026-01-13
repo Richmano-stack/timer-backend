@@ -6,7 +6,7 @@ import statusRoutes from "./routes/status.js";
 import adminRoutes from "./routes/admin.js";
 
 dotenv.config();
-const app = express();
+export const app = express();
 
 // Middleware
 app.use(express.json());
@@ -19,8 +19,10 @@ app.use("/api/admin", adminRoutes);
 // Initialize DB and Start Server
 const PORT = process.env.PORT || 4000;
 
-initDb().then(() => {
-    app.listen(PORT, () => {
-        console.log(`Server running on port ${PORT}`);
+if (process.env.NODE_ENV !== 'test') {
+    initDb().then(() => {
+        app.listen(PORT, () => {
+            console.log(`Server running on port ${PORT}`);
+        });
     });
-});
+}

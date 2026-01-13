@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { pool } from "../db.js";
 import { AuthRequest } from "../middleware/auth.js";
+import { generateUniqueEmail } from "../utils/authUtils.js";
 
 export const register = async (req: Request, res: Response) => {
     const { username, password, firstName, lastName } = req.body;
@@ -15,28 +16,12 @@ export const register = async (req: Request, res: Response) => {
 
     try {
         // 2. Automatic Email Generation Logic
-        const baseEmailPrefix = `${firstName.toLowerCase()}.${lastName.toLowerCase()}`;
-        const domain = "@xcompany.com";
-
-        // Find existing emails with the same prefix to handle collisions
         const { rows: existingEmails } = await pool.query(
             "SELECT email FROM users WHERE email LIKE $1",
-            [`${baseEmailPrefix}%${domain}`]
+            [`${firstName.toLowerCase()}.${lastName.toLowerCase()}%@xcompany.com`]
         );
 
-        let email = `${baseEmailPrefix}${domain}`;
-        if (existingEmails.length > 0) {
-            // Extract suffixes and find the next available number
-            const suffixes = existingEmails
-                .map(row => {
-                    const match = row.email.match(new RegExp(`${baseEmailPrefix}(\\d+)${domain}`));
-                    return match ? parseInt(match[1]) : 1;
-                })
-                .filter(n => !isNaN(n));
-
-            const maxSuffix = suffixes.length > 0 ? Math.max(...suffixes) : 1;
-            email = `${baseEmailPrefix}${maxSuffix + 1}${domain}`;
-        }
+        const email = generateUniqueEmail(firstName, lastName, existingEmails.map(row => row.email));
 
         // 3. Security: Hash Password
         const hashedPassword = await bcrypt.hash(password, 10);

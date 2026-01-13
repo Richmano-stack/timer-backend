@@ -4,12 +4,20 @@ import { initDb } from "./db.js";
 import authRoutes from "./routes/auth.js";
 import statusRoutes from "./routes/status.js";
 import adminRoutes from "./routes/admin.js";
+import cors from "cors";
 
-dotenv.config();
-export const app = express();
+dotenv.config();           // load env first
+
+export const app = express();  // create the Express app
 
 // Middleware
-app.use(express.json());
+
+app.use(cors({
+    origin: "http://localhost:3000", // your frontend URL
+    credentials: true                 // allow cookies
+}));
+
+app.use(express.json());            // JSON parsing
 
 // Routes
 app.use("/api/auth", authRoutes);

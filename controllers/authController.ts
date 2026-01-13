@@ -48,10 +48,16 @@ export const register = async (req: Request, res: Response) => {
         );
 
         res.status(201).json(rows[0]);
-    } catch (err: unknown) {
+    } catch (err: any) {
         // 5. Error Handling
         if (err && typeof err === "object" && "code" in err && err.code === "23505") {
-            return res.status(400).json({ error: "Username already exists" });
+            const detail = err.detail || "";
+            if (detail.includes("username")) {
+                return res.status(400).json({ error: "Username already exists" });
+            } else if (detail.includes("email")) {
+                return res.status(400).json({ error: "Email already exists" });
+            }
+            return res.status(400).json({ error: "Duplicate entry found" });
         }
         console.error(err);
         res.status(500).json({ error: "Registration failed" });
@@ -192,7 +198,14 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
 
         const { rows } = await pool.query(query + " RETURNING id, username, email, first_name, last_name", params);
         res.json(rows[0]);
-    } catch (err) {
+    } catch (err: any) {
+        if (err && typeof err === "object" && "code" in err && err.code === "23505") {
+            const detail = err.detail || "";
+            if (detail.includes("email")) {
+                return res.status(400).json({ error: "Email already exists" });
+            }
+            return res.status(400).json({ error: "Duplicate entry found" });
+        }
         console.error(err);
         res.status(500).json({ error: "Profile update failed" });
     }

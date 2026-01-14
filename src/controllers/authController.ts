@@ -87,7 +87,21 @@ export const login = async (req: Request, res: Response) => {
             [user.id, refreshToken, expiresAt]
         );
 
-        res.json({ token, refreshToken });
+        res.
+            cookie("token", token, {
+                httpOnly: true,
+                secure: false,
+                sameSite: "lax",
+                maxAge: 60 * 60 * 1000
+
+            }).
+            cookie("refresh_token", refreshToken, {
+                httpOnly: true,
+                secure: false,
+                sameSite: "lax",
+                maxAge: 7 * 24 * 60 * 60 * 1000
+            })
+            .json({ success: true });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Login failed" });
@@ -95,10 +109,10 @@ export const login = async (req: Request, res: Response) => {
 };
 
 export const refreshToken = async (req: Request, res: Response) => {
-    const { refreshToken } = req.body;
+    const refreshToken = req.cookies.refresh_token;
 
     if (!refreshToken) {
-        return res.status(400).json({ error: "Refresh token is required" });
+        return res.status(401).json({ error: "Refresh token is required" });
     }
 
     try {
@@ -107,7 +121,7 @@ export const refreshToken = async (req: Request, res: Response) => {
             [refreshToken]
         );
 
-        if (rows.length === 0) {
+        if (!rows.length) {
             return res.status(401).json({ error: "Invalid or expired refresh token" });
         }
 
@@ -125,19 +139,34 @@ export const refreshToken = async (req: Request, res: Response) => {
             { expiresIn: "1h" }
         );
 
-        res.json({ token: newToken });
+        res.cookie("token", newToken, {
+            httpOnly: true,
+            secure: false,
+            sameSite: "lax",
+            maxAge: 60 * 60 * 1000
+        }).json({ success: true });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Token refresh failed" });
     }
 };
 
+
 export const logout = async (req: Request, res: Response) => {
-    const { refreshToken } = req.body;
+    const refreshToken = req.cookies.refresh_token;
 
     try {
-        await pool.query("DELETE FROM refresh_tokens WHERE token = $1", [refreshToken]);
-        res.json({ message: "Logged out successfully" });
+        if (refreshToken) {
+            await pool.query(
+                "DELETE FROM refresh_tokens WHERE token = $1",
+                [refreshToken]
+            );
+        }
+
+        res
+            .clearCookie("token")
+            .clearCookie("refresh_token")
+            .json({ success: true });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Logout failed" });

@@ -4,47 +4,42 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { pool } from "../db.js";
 import { AuthRequest } from "../middleware/auth.js";
+import { generateUniqueEmail } from "../utils/authUtils.js";
+import { UserRole } from "../types.js";
 
 export const register = async (req: Request, res: Response) => {
-    const { username, password, firstName, lastName } = req.body;
+    const { username, password, firstName, lastName, role } = req.body;
 
     // 1. Validation
     if (!username || !password || !firstName || !lastName) {
         return res.status(400).json({ error: "Missing required fields: username, password, firstName, lastName" });
     }
 
+    // Validate role if provided
+    let finalRole = UserRole.AGENT;
+    if (role) {
+        if (!Object.values(UserRole).includes(role as UserRole)) {
+            return res.status(400).json({ error: `Invalid role. Allowed roles: ${Object.values(UserRole).join(", ")}` });
+        }
+        finalRole = role as UserRole;
+    }
+
     try {
         // 2. Automatic Email Generation Logic
-        const baseEmailPrefix = `${firstName.toLowerCase()}.${lastName.toLowerCase()}`;
-        const domain = "@xcompany.com";
-
-        // Find existing emails with the same prefix to handle collisions
         const { rows: existingEmails } = await pool.query(
             "SELECT email FROM users WHERE email LIKE $1",
-            [`${baseEmailPrefix}%${domain}`]
+            [`${firstName.toLowerCase()}.${lastName.toLowerCase()}%@xcompany.com`]
         );
 
-        let email = `${baseEmailPrefix}${domain}`;
-        if (existingEmails.length > 0) {
-            // Extract suffixes and find the next available number
-            const suffixes = existingEmails
-                .map(row => {
-                    const match = row.email.match(new RegExp(`${baseEmailPrefix}(\\d+)${domain}`));
-                    return match ? parseInt(match[1]) : 1;
-                })
-                .filter(n => !isNaN(n));
-
-            const maxSuffix = suffixes.length > 0 ? Math.max(...suffixes) : 1;
-            email = `${baseEmailPrefix}${maxSuffix + 1}${domain}`;
-        }
+        const email = generateUniqueEmail(firstName, lastName, existingEmails.map(row => row.email));
 
         // 3. Security: Hash Password
         const hashedPassword = await bcrypt.hash(password, 10);
 
         // 4. Data Integrity: Insert with RETURNING
         const { rows } = await pool.query(
-            "INSERT INTO users (username, email, password_hash, first_name, last_name) VALUES ($1, $2, $3, $4, $5) RETURNING id, username, email, first_name, last_name",
-            [username, email, hashedPassword, firstName, lastName]
+            "INSERT INTO users (username, email, password_hash, first_name, last_name, role) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, username, email, first_name, last_name, role",
+            [username, email, hashedPassword, firstName, lastName, finalRole]
         );
 
         res.status(201).json(rows[0]);
@@ -79,7 +74,12 @@ export const login = async (req: Request, res: Response) => {
         );
         const user = rows[0];
 
-        if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+        if (!user) {
+            return res.status(401).json({ error: "Invalid credentials" });
+        }
+
+        const isMatch = await bcrypt.compare(password, user.password_hash);
+        if (!isMatch) {
             return res.status(401).json({ error: "Invalid credentials" });
         }
 
@@ -102,7 +102,21 @@ export const login = async (req: Request, res: Response) => {
             [user.id, refreshToken, expiresAt]
         );
 
-        res.json({ token, refreshToken });
+        res.
+            cookie("token", token, {
+                httpOnly: true,
+                secure: false,
+                sameSite: "lax",
+                maxAge: 60 * 60 * 1000
+
+            }).
+            cookie("refresh_token", refreshToken, {
+                httpOnly: true,
+                secure: false,
+                sameSite: "lax",
+                maxAge: 7 * 24 * 60 * 60 * 1000
+            })
+            .json({ success: true });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Login failed" });
@@ -110,10 +124,10 @@ export const login = async (req: Request, res: Response) => {
 };
 
 export const refreshToken = async (req: Request, res: Response) => {
-    const { refreshToken } = req.body;
+    const refreshToken = req.cookies.refresh_token;
 
     if (!refreshToken) {
-        return res.status(400).json({ error: "Refresh token is required" });
+        return res.status(401).json({ error: "Refresh token is required" });
     }
 
     try {
@@ -122,7 +136,7 @@ export const refreshToken = async (req: Request, res: Response) => {
             [refreshToken]
         );
 
-        if (rows.length === 0) {
+        if (!rows.length) {
             return res.status(401).json({ error: "Invalid or expired refresh token" });
         }
 
@@ -140,19 +154,34 @@ export const refreshToken = async (req: Request, res: Response) => {
             { expiresIn: "1h" }
         );
 
-        res.json({ token: newToken });
+        res.cookie("token", newToken, {
+            httpOnly: true,
+            secure: false,
+            sameSite: "lax",
+            maxAge: 60 * 60 * 1000
+        }).json({ success: true });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Token refresh failed" });
     }
 };
 
+
 export const logout = async (req: Request, res: Response) => {
-    const { refreshToken } = req.body;
+    const refreshToken = req.cookies.refresh_token;
 
     try {
-        await pool.query("DELETE FROM refresh_tokens WHERE token = $1", [refreshToken]);
-        res.json({ message: "Logged out successfully" });
+        if (refreshToken) {
+            await pool.query(
+                "DELETE FROM refresh_tokens WHERE token = $1",
+                [refreshToken]
+            );
+        }
+
+        res
+            .clearCookie("token")
+            .clearCookie("refresh_token")
+            .json({ success: true });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Logout failed" });

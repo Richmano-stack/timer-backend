@@ -1,8 +1,8 @@
+import dotenv from 'dotenv';
+dotenv.config({ path: 'env.test', override: true });
+
 import { beforeAll, afterAll, afterEach } from 'vitest';
 import { pool } from '../db.js';
-import dotenv from 'dotenv';
-
-dotenv.config({ path: 'env.test', override: true });
 
 beforeAll(async () => {
     // Ensure we are in test environment

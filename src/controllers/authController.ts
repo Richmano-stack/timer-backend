@@ -5,13 +5,23 @@ import crypto from "crypto";
 import { pool } from "../db.js";
 import { AuthRequest } from "../middleware/auth.js";
 import { generateUniqueEmail } from "../utils/authUtils.js";
+import { UserRole } from "../types.js";
 
 export const register = async (req: Request, res: Response) => {
-    const { username, password, firstName, lastName } = req.body;
+    const { username, password, firstName, lastName, role } = req.body;
 
     // 1. Validation
     if (!username || !password || !firstName || !lastName) {
         return res.status(400).json({ error: "Missing required fields: username, password, firstName, lastName" });
+    }
+
+    // Validate role if provided
+    let finalRole = UserRole.AGENT;
+    if (role) {
+        if (!Object.values(UserRole).includes(role as UserRole)) {
+            return res.status(400).json({ error: `Invalid role. Allowed roles: ${Object.values(UserRole).join(", ")}` });
+        }
+        finalRole = role as UserRole;
     }
 
     try {
@@ -28,8 +38,8 @@ export const register = async (req: Request, res: Response) => {
 
         // 4. Data Integrity: Insert with RETURNING
         const { rows } = await pool.query(
-            "INSERT INTO users (username, email, password_hash, first_name, last_name) VALUES ($1, $2, $3, $4, $5) RETURNING id, username, email, first_name, last_name",
-            [username, email, hashedPassword, firstName, lastName]
+            "INSERT INTO users (username, email, password_hash, first_name, last_name, role) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, username, email, first_name, last_name, role",
+            [username, email, hashedPassword, firstName, lastName, finalRole]
         );
 
         res.status(201).json(rows[0]);
@@ -64,7 +74,12 @@ export const login = async (req: Request, res: Response) => {
         );
         const user = rows[0];
 
-        if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+        if (!user) {
+            return res.status(401).json({ error: "Invalid credentials" });
+        }
+
+        const isMatch = await bcrypt.compare(password, user.password_hash);
+        if (!isMatch) {
             return res.status(401).json({ error: "Invalid credentials" });
         }
 

@@ -1,6 +1,6 @@
-import dotenv from "dotenv";
+import * as dotenv from "dotenv";
 import express from "express";
-import { initDb } from "./db.js";
+import { initDb } from "./drizzle/db.js";
 import authRoutes from "./routes/auth.js";
 import statusRoutes from "./routes/status.js";
 import adminRoutes from "./routes/admin.js";

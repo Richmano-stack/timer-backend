@@ -8,7 +8,6 @@
     // See also https://aka.ms/tsconfig/module
     "module": "node16",
     "target": "esnext",
-    "types": [],
     // For nodejs:
     // "lib": ["esnext"],
     // "types": ["node"],
@@ -42,6 +41,7 @@
   "exclude": [
     "node_modules",
     "dist",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    "drizzle.config.ts"
   ]
 }

@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
-import { pool } from "../db.js";
+import { pool } from "../drizzle/db.js";
 import { AuthRequest } from "../middleware/auth.js";
 
 export const getTeamStatus = async (req: AuthRequest, res: Response) => {

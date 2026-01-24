@@ -1,18 +1,35 @@
-import dotenv from "dotenv";
-import pg from "pg";
+import * as dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// 1. CALL THIS FIRST, before anything else
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
+
+import pg from "pg";
+import { drizzle } from "drizzle-orm/node-postgres";
+import * as schema from "./schema.js";
+
 const { Pool } = pg;
+
+// 2. Add a sanity check to catch the error early
+if (!process.env.DATABASE_URL) {
+    throw new Error("DATABASE_URL is not defined in .env file");
+}
 
 export const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
 });
 
+export const db = drizzle(pool, { schema });
+
 export const initDb = async () => {
     try {
         await pool.query(`
             CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
+                id SERIAL PRIMARY KEY, 
                 username TEXT UNIQUE NOT NULL,
                 email TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
@@ -70,5 +87,4 @@ export const initDb = async () => {
         console.error(err);
     }
 };
-
 

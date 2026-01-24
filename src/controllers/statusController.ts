@@ -1,5 +1,5 @@
 import { Response } from "express";
-import { pool } from "../db.js";
+import { pool } from "../drizzle/db.js";
 import { AuthRequest } from "../middleware/auth.js";
 import { z } from "zod";
 

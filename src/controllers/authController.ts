@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import { pool } from "../db.js";
+import { pool } from "../drizzle/db.js";
 import { AuthRequest } from "../middleware/auth.js";
 import { generateUniqueEmail } from "../utils/authUtils.js";
 import { UserRole } from "../types.js";

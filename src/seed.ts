@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { pool } from "./db.js";
+import { pool } from "./drizzle/db.js";
 
 async function seed() {
     console.log("🌱 Starting database seeding...");

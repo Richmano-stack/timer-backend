@@ -8,6 +8,7 @@ import cors from "cors";
 import cookieParser from 'cookie-parser';
 dotenv.config();
 import { auth } from "./drizzle/auth.js";
+import { toNodeHandler } from "better-auth/node";
 
 export const app = express();
 
@@ -22,6 +23,10 @@ app.use(cors({
 
 app.use(express.json());
 app.use(cookieParser());
+
+app.all("/api/auth/*any", (req, res) => {
+    return toNodeHandler(auth)(req, res);
+});
 
 /* app.all("/api/auth/*any", async (req, res) => {
 
@@ -56,7 +61,7 @@ app.use(cookieParser());
  */
 
 // Routes
-app.use("/api/auth", authRoutes);
+/* app.use("/api/auth", authRoutes); */
 app.use("/api/status", statusRoutes);
 app.use("/api/admin", adminRoutes);
 

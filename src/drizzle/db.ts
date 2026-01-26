@@ -5,7 +5,6 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// 1. CALL THIS FIRST, before anything else
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 import pg from "pg";
@@ -14,7 +13,6 @@ import * as schema from "./schema.js";
 
 const { Pool } = pg;
 
-// 2. Add a sanity check to catch the error early
 if (!process.env.DATABASE_URL) {
     throw new Error("DATABASE_URL is not defined in .env file");
 }
@@ -25,66 +23,4 @@ export const pool = new Pool({
 
 export const db = drizzle(pool, { schema });
 
-export const initDb = async () => {
-    try {
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY, 
-                username TEXT UNIQUE NOT NULL,
-                email TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                first_name TEXT NOT NULL,
-                last_name TEXT NOT NULL,
-                current_status TEXT DEFAULT 'available', -- 'on_production', 'lunch_break', 'away'
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-
-            DO $$ 
-            BEGIN 
-                -- Ensure email column exists and is unique
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='email') THEN
-                    ALTER TABLE users ADD COLUMN email TEXT UNIQUE NOT NULL;
-                ELSE
-                    ALTER TABLE users ALTER COLUMN email SET NOT NULL;
-                    -- Add unique constraint if it doesn't exist
-                    IF NOT EXISTS (SELECT 1 FROM information_schema.constraint_column_usage WHERE table_name = 'users' AND column_name = 'email' AND constraint_name = 'users_email_key') THEN
-                        ALTER TABLE users ADD CONSTRAINT users_email_key UNIQUE (email);
-                    END IF;
-                END IF;
-
-                -- Ensure username is unique (if not already handled by CREATE TABLE)
-                IF NOT EXISTS (SELECT 1 FROM information_schema.constraint_column_usage WHERE table_name = 'users' AND column_name = 'username' AND constraint_name = 'users_username_key') THEN
-                    ALTER TABLE users ADD CONSTRAINT users_username_key UNIQUE (username);
-                END IF;
-
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='role') THEN
-                    ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'agent';
-                END IF;
-
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='is_active') THEN
-                    ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT true;
-                END IF;
-            END $$;
-            
-            CREATE TABLE IF NOT EXISTS status_logs (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-                status_name TEXT NOT NULL,
-                start_time BIGINT NOT NULL,
-                end_time BIGINT, -- NULL if still active
-                duration_ms INTEGER DEFAULT 0 -- Calculated when session ends
-            );
-
-            CREATE TABLE IF NOT EXISTS refresh_tokens (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-                token TEXT UNIQUE NOT NULL,
-                expires_at TIMESTAMP NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        `);
-    } catch (err) {
-        console.error(err);
-    }
-};
 

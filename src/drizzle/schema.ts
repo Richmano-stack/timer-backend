@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, unique, serial, bigint, integer } from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
     id: text("id").primaryKey(),
@@ -8,6 +8,8 @@ export const user = pgTable("user", {
     image: text("image"),
     createdAt: timestamp("createdAt").notNull(),
     updatedAt: timestamp("updatedAt").notNull(),
+    role: text("role").notNull().default("agent"),
+    is_active: boolean("is_active").notNull().default(true),
 }, (table) => [
     unique("user_email_unique").on(table.email),
 ]);
@@ -37,4 +39,15 @@ export const account = pgTable("account", {
     password: text("password"),
     createdAt: timestamp("createdAt").notNull(),
     updatedAt: timestamp("updatedAt").notNull(),
+});
+
+export const statusLogs = pgTable("status_logs", {
+    id: serial("id").primaryKey(),
+    userId: text("user_id")
+        .notNull()
+        .references(() => user.id, { onDelete: 'cascade' }),
+    statusName: text("status_name").notNull(),
+    startTime: bigint("start_time", { mode: "number" }).notNull(),
+    endTime: bigint("end_time", { mode: "number" }),
+    durationMs: integer("duration_ms").default(0),
 });

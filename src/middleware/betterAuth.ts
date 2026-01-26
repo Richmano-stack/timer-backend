@@ -1,18 +1,19 @@
-
-import { Request, Response, NextFunction } from "express";
 import { auth } from "../drizzle/auth.js";
-import { fromNodeHeaders } from "better-auth/node";
+import { Response, NextFunction, Request } from "express";
 
-export const authMiddleware = async (req: Request, res: Response, next: NextFunction) => {
+export interface AuthRequest extends Request {
+    user?: any;
+    session?: any;
+}
 
+export const authMiddleware = async (req: any, res: Response, next: NextFunction) => {
     const session = await auth.api.getSession({
-        headers: fromNodeHeaders(req.headers),
+        headers: req.headers,
     });
 
     if (!session) {
         return res.status(401).json({ error: "Unauthorized" });
     }
-
 
     req.user = session.user;
     req.session = session.session;

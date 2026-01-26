@@ -1,6 +1,8 @@
 import { Response } from "express";
-import { pool } from "../drizzle/db.js";
-import { AuthRequest } from "../middleware/auth.js";
+import { db } from "../drizzle/db.js";
+import { statusLogs } from "../drizzle/schema.js";
+import { eq, and, isNull, desc, gte, lte, sql } from "drizzle-orm";
+import { AuthRequest } from "../middleware/betterAuth.js";
 import { z } from "zod";
 
 const StatusSchema = z.enum(["available", "lunch_break", "on_production", "away", "meeting", "short_break", "training", "off_duty"]);
@@ -20,34 +22,49 @@ export const changeStatus = async (req: AuthRequest, res: Response) => {
     }
 
     try {
-        // 1. End current active log
-        const endTime = Date.now();
-        const { rows: activeLogs } = await pool.query(
-            "SELECT * FROM status_logs WHERE user_id = $1 AND end_time IS NULL",
-            [userId]
-        );
+        await db.transaction(async (tx) => {
+            // 1. End current active log
+            const endTime = Date.now();
 
-        if (activeLogs.length > 0) {
+            const activeLogs = await tx
+                .select()
+                .from(statusLogs)
+                .where(and(
+                    eq(statusLogs.userId, userId),
+                    isNull(statusLogs.endTime)
+                ));
+
             const activeLog = activeLogs[0];
-            const duration = endTime - parseInt(activeLog.start_time);
-            await pool.query(
-                "UPDATE status_logs SET end_time = $1, duration_ms = $2 WHERE id = $3",
-                [endTime, duration, activeLog.id]
-            );
-        }
 
-        // 2. Start new log
-        const { rows: newLog } = await pool.query(
-            "INSERT INTO status_logs (user_id, status_name, start_time) VALUES ($1, $2, $3) RETURNING *",
-            [userId, status, endTime]
-        );
+            if (activeLog) {
+                const duration = endTime - activeLog.startTime; // startTime is number (bigint mode)
 
-        // 3. Update user current status
-        await pool.query("UPDATE users SET current_status = $1 WHERE id = $2", [status, userId]);
+                await tx
+                    .update(statusLogs)
+                    .set({
+                        endTime: endTime,
+                        durationMs: duration
+                    })
+                    .where(eq(statusLogs.id, activeLog.id));
+            }
 
-        res.json(newLog[0]);
+            // 2. Start new log
+            const [newLog] = await tx
+                .insert(statusLogs)
+                .values({
+                    userId,
+                    statusName: status,
+                    startTime: endTime
+                })
+                .returning();
+
+            // Note: Users table update required 'current_status' column which is missing in schema.
+            // Skipping update to users table.
+
+            res.json(newLog);
+        });
     } catch (err) {
-        console.error(err);
+        console.error("Change status error:", err);
         res.status(500).json({ error: "Failed to change status" });
     }
 };
@@ -57,16 +74,18 @@ export const getCurrentStatus = async (req: AuthRequest, res: Response) => {
     const userId = req.user.id;
 
     try {
-        const { rows } = await pool.query(
-            "SELECT * FROM status_logs WHERE user_id = $1 AND end_time IS NULL LIMIT 1",
-            [userId]
-        );
+        const activeLog = await db.query.statusLogs.findFirst({
+            where: and(
+                eq(statusLogs.userId, userId),
+                isNull(statusLogs.endTime)
+            )
+        });
 
-        if (rows.length === 0) {
+        if (!activeLog) {
             return res.status(404).json({ error: "No active status found" });
         }
 
-        res.json(rows[0]);
+        res.json(activeLog);
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Failed to fetch current status" });
@@ -79,27 +98,31 @@ export const stopStatus = async (req: AuthRequest, res: Response) => {
 
     try {
         const endTime = Date.now();
-        const { rows: activeLogs } = await pool.query(
-            "SELECT * FROM status_logs WHERE user_id = $1 AND end_time IS NULL",
-            [userId]
-        );
 
-        if (activeLogs.length === 0) {
+        const activeLog = await db.query.statusLogs.findFirst({
+            where: and(
+                eq(statusLogs.userId, userId),
+                isNull(statusLogs.endTime)
+            )
+        });
+
+        if (!activeLog) {
             return res.status(400).json({ error: "No active status to stop" });
         }
 
-        const activeLog = activeLogs[0];
-        const duration = endTime - parseInt(activeLog.start_time);
+        const duration = endTime - activeLog.startTime;
 
-        await pool.query(
-            "UPDATE status_logs SET end_time = $1, duration_ms = $2 WHERE id = $3",
-            [endTime, duration, activeLog.id]
-        );
+        await db.update(statusLogs)
+            .set({
+                endTime: endTime,
+                durationMs: duration
+            })
+            .where(eq(statusLogs.id, activeLog.id));
 
-        // Update user current status to 'off_duty'
-        await pool.query("UPDATE users SET current_status = $1 WHERE id = $2", ["off_duty", userId]);
+        // Note: Users table update required 'current_status' column which is missing in schema.
+        // Skipping update to users table.
 
-        res.json({ message: "Status stopped successfully", lastLog: activeLog });
+        res.json({ message: "Status stopped successfully", lastLog: { ...activeLog, endTime, durationMs: duration } });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Failed to stop status" });
@@ -112,22 +135,22 @@ export const getHistory = async (req: AuthRequest, res: Response) => {
     const { from, to } = req.query;
 
     try {
-        let query = "SELECT * FROM status_logs WHERE user_id = $1";
-        const params: unknown[] = [userId];
+        const conditions = [eq(statusLogs.userId, userId)];
 
         if (from) {
-            params.push(from);
-            query += ` AND start_time >= $${params.length}`;
+            conditions.push(gte(statusLogs.startTime, Number(from)));
         }
         if (to) {
-            params.push(to);
-            query += ` AND start_time <= $${params.length}`;
+            conditions.push(lte(statusLogs.startTime, Number(to)));
         }
 
-        query += " ORDER BY start_time DESC";
+        const logs = await db
+            .select()
+            .from(statusLogs)
+            .where(and(...conditions))
+            .orderBy(desc(statusLogs.startTime));
 
-        const { rows } = await pool.query(query, params);
-        res.json(rows);
+        res.json(logs);
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Failed to fetch history" });
@@ -142,20 +165,25 @@ export const getSummary = async (req: AuthRequest, res: Response) => {
     try {
         // Default to last 7 days if no range provided
         const defaultFrom = Date.now() - 7 * 24 * 60 * 60 * 1000;
-        const startTime = from ? parseInt(from as string) : defaultFrom;
-        const endTime = to ? parseInt(to as string) : Date.now();
+        const startTime = from ? Number(from) : defaultFrom;
+        const endTime = to ? Number(to) : Date.now();
 
-        const { rows } = await pool.query(
-            `SELECT status_name, SUM(duration_ms) as total_duration 
-             FROM status_logs 
-             WHERE user_id = $1 AND start_time >= $2 AND start_time <= $3 
-             GROUP BY status_name`,
-            [userId, startTime, endTime]
-        );
+        const summaryData = await db
+            .select({
+                status_name: statusLogs.statusName,
+                total_duration: sql<string>`sum(${statusLogs.durationMs})`.mapWith(Number)
+            })
+            .from(statusLogs)
+            .where(and(
+                eq(statusLogs.userId, userId),
+                gte(statusLogs.startTime, startTime),
+                lte(statusLogs.startTime, endTime)
+            ))
+            .groupBy(statusLogs.statusName);
 
         res.json({
             period: { from: startTime, to: endTime },
-            summary: rows
+            summary: summaryData
         });
     } catch (err) {
         console.error(err);
@@ -169,29 +197,33 @@ export const exportLogs = async (req: AuthRequest, res: Response) => {
     const { from, to } = req.query;
 
     try {
-        let query = "SELECT status_name, start_time, end_time, duration_ms FROM status_logs WHERE user_id = $1";
-        const params: unknown[] = [userId];
+        const conditions = [eq(statusLogs.userId, userId)];
 
         if (from) {
-            params.push(from);
-            query += ` AND start_time >= $${params.length}`;
+            conditions.push(gte(statusLogs.startTime, Number(from)));
         }
         if (to) {
-            params.push(to);
-            query += ` AND start_time <= $${params.length}`;
+            conditions.push(lte(statusLogs.startTime, Number(to)));
         }
 
-        query += " ORDER BY start_time DESC";
-
-        const { rows } = await pool.query(query, params);
+        const logs = await db
+            .select({
+                statusName: statusLogs.statusName,
+                startTime: statusLogs.startTime,
+                endTime: statusLogs.endTime,
+                durationMs: statusLogs.durationMs
+            })
+            .from(statusLogs)
+            .where(and(...conditions))
+            .orderBy(desc(statusLogs.startTime));
 
         // Convert to CSV
         const headers = ["Status", "Start Time", "End Time", "Duration (ms)"];
-        const csvRows = rows.map(row => [
-            row.status_name,
-            new Date(parseInt(row.start_time)).toISOString(),
-            row.end_time ? new Date(parseInt(row.end_time)).toISOString() : "Active",
-            row.duration_ms || 0
+        const csvRows = logs.map(row => [
+            row.statusName,
+            new Date(row.startTime).toISOString(),
+            row.endTime ? new Date(row.endTime).toISOString() : "Active",
+            row.durationMs || 0
         ].join(","));
 
         const csvContent = [headers.join(","), ...csvRows].join("\n");

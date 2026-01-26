@@ -15,6 +15,13 @@
       "when": 1769267869143,
       "tag": "0001_illegal_chamber",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1769457486437,
+      "tag": "0002_watery_payback",
+      "breakpoints": true
     }
   ]
 }

@@ -1,9 +1,8 @@
 import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import { pool } from "../drizzle/db.js";
-import { AuthRequest } from "../middleware/auth.js";
 
-export const getTeamStatus = async (req: AuthRequest, res: Response) => {
+export const getTeamStatus = async (req: Request, res: Response) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
     try {
         const { rows } = await pool.query(
@@ -16,7 +15,7 @@ export const getTeamStatus = async (req: AuthRequest, res: Response) => {
     }
 };
 
-export const getAllUsers = async (req: AuthRequest, res: Response) => {
+export const getAllUsers = async (req: Request, res: Response) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
     try {
         const { rows } = await pool.query(

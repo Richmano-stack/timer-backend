@@ -1,8 +1,7 @@
-import { Response, NextFunction } from "express";
-import { AuthRequest } from "./auth.js";
+import { Request, Response, NextFunction } from "express";
 
 const roleAuth = (allowedRoles: string[]) => {
-    return (req: AuthRequest, res: Response, next: NextFunction) => {
+    return (req: Request, res: Response, next: NextFunction) => {
         if (!req.user) {
             console.log("RoleAuth failed: No user in request");
             return res.status(401).json({ error: "Unauthorized" });

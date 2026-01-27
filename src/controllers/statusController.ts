@@ -22,6 +22,18 @@ export const changeStatus = async (req: AuthRequest, res: Response) => {
     }
 
     try {
+
+        const currentActive = await db.query.statusLogs.findFirst({
+            where: and(eq(statusLogs.userId, userId), isNull(statusLogs.endTime))
+        });
+
+        if (currentActive?.statusName === status) {
+            return res.status(400).json({
+                error: "Redundant Status",
+                message: "User is already in this status."
+            });
+        }
+
         await db.transaction(async (tx) => {
             // 1. End current active log
             const endTime = Date.now();

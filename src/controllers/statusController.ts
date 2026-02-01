@@ -70,9 +70,6 @@ export const changeStatus = async (req: AuthRequest, res: Response) => {
                 })
                 .returning();
 
-            // Note: Users table update required 'current_status' column which is missing in schema.
-            // Skipping update to users table.
-
             res.json(newLog);
         });
     } catch (err) {

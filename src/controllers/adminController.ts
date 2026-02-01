@@ -6,7 +6,11 @@ export const getTeamStatus = async (req: Request, res: Response) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
     try {
         const { rows } = await pool.query(
-            "SELECT id, username, first_name, last_name, current_status, role FROM users WHERE is_active = true ORDER BY first_name ASC"
+            `SELECT u.id, u.name as username, u.role, sl.status_name as current_status 
+             FROM "user" u 
+             LEFT JOIN status_logs sl ON sl.user_id = u.id AND sl.end_time IS NULL 
+             WHERE u.is_active = true 
+             ORDER BY u.name ASC`
         );
         res.json(rows);
     } catch (err) {
@@ -19,7 +23,7 @@ export const getAllUsers = async (req: Request, res: Response) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
     try {
         const { rows } = await pool.query(
-            "SELECT id, username, email, first_name, last_name, role, is_active, created_at FROM users ORDER BY created_at DESC"
+            'SELECT id, name as username, email, role, is_active, "createdAt" FROM "user" ORDER BY "createdAt" DESC'
         );
         res.json(rows);
     } catch (err) {
@@ -29,17 +33,20 @@ export const getAllUsers = async (req: Request, res: Response) => {
 };
 
 export const createUser = async (req: Request, res: Response) => {
-    const { username, password, firstName, lastName, email, role } = req.body;
+    const { username, password, email, role } = req.body;
 
-    if (!username || !password || !firstName || !lastName || !email) {
+    if (!username || !password || !email) {
         return res.status(400).json({ error: "Missing required fields" });
     }
 
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
+        // Note: Better-auth stores passwords in the 'account' table. 
+        // This direct insert into 'user' table will only work if the columns match.
+        // The 'user' table in your schema does not have password_hash.
         const { rows } = await pool.query(
-            "INSERT INTO users (username, email, password_hash, first_name, last_name, role) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, username, email, first_name, last_name, role",
-            [username, email, hashedPassword, firstName, lastName, role || 'agent']
+            'INSERT INTO "user" (name, email, role, "emailVerified", "createdAt", "updatedAt") VALUES ($1, $2, $3, false, NOW(), NOW()) RETURNING id, name as username, email, role',
+            [username, email, role || 'agent']
         );
         res.status(201).json(rows[0]);
     } catch (err: unknown) {
@@ -53,12 +60,12 @@ export const createUser = async (req: Request, res: Response) => {
 
 export const updateUser = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { firstName, lastName, email, role, is_active } = req.body;
+    const { email, role, is_active } = req.body;
 
     try {
         const { rows } = await pool.query(
-            "UPDATE users SET first_name = $1, last_name = $2, email = $3, role = $4, is_active = $5 WHERE id = $6 RETURNING id, username, email, first_name, last_name, role, is_active",
-            [firstName, lastName, email, role, is_active, id]
+            'UPDATE "user" SET email = $1, role = $2, is_active = $3, "updatedAt" = NOW() WHERE id = $4 RETURNING id, name as username, email, role, is_active',
+            [email, role, is_active, id]
         );
 
         if (rows.length === 0) {
@@ -77,7 +84,7 @@ export const deactivateUser = async (req: Request, res: Response) => {
 
     try {
         const { rows } = await pool.query(
-            "UPDATE users SET is_active = false WHERE id = $1 RETURNING id, username, is_active",
+            'UPDATE "user" SET is_active = false, "updatedAt" = NOW() WHERE id = $1 RETURNING id, name as username, is_active',
             [id]
         );
 

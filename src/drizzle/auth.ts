@@ -10,6 +10,20 @@ export const auth = betterAuth({
             ...schema,
         }
     }),
+    user: {
+        additionalFields: {
+            role: {
+                type: "string",
+                required: false,
+                defaultValue: "agent",
+            },
+            is_active: {
+                type: "boolean",
+                required: false,
+                defaultValue: true,
+            }
+        }
+    },
     baseURL: "http://localhost:4000",
     emailAndPassword: {
         enabled: true,
@@ -21,6 +35,13 @@ export const auth = betterAuth({
         cookieCache: {
             enabled: true,
             maxAge: 5 * 60 // 5 minutes cache
+        },
+        cookie: {
+            name: "better-auth.session",
+            sameSite: "lax",
+            secure: false,
+            httpOnly: true,
+            path: "/",
         }
     },
 });

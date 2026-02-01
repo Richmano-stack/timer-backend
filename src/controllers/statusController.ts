@@ -7,74 +7,54 @@ import { z } from "zod";
 
 const StatusSchema = z.enum(["available", "lunch_break", "on_production", "away", "meeting", "short_break", "training", "off_duty"]);
 
-export const changeStatus = async (req: AuthRequest, res: Response) => {
+export const updateStatus = async (req: AuthRequest, res: Response) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
     const { status } = req.body;
+    const validation = StatusSchema.safeParse(status);
+    if (!validation.success) return res.status(400).json({ error: "Invalid status" });
+
     const userId = req.user.id;
 
-    // Validation
-    const validation = StatusSchema.safeParse(status);
-    if (!validation.success) {
-        return res.status(400).json({
-            error: "Invalid status name",
-            details: validation.error.format()
-        });
-    }
-
     try {
-
-        const currentActive = await db.query.statusLogs.findFirst({
-            where: and(eq(statusLogs.userId, userId), isNull(statusLogs.endTime))
-        });
-
-        if (currentActive?.statusName === status) {
-            return res.status(400).json({
-                error: "Redundant Status",
-                message: "User is already in this status."
-            });
-        }
-
-        await db.transaction(async (tx) => {
-            // 1. End current active log
-            const endTime = Date.now();
-
-            const activeLogs = await tx
+        const result = await db.transaction(async (tx) => {
+            // 2. Find and close any existing log
+            const [activeLog] = await tx
                 .select()
                 .from(statusLogs)
-                .where(and(
-                    eq(statusLogs.userId, userId),
-                    isNull(statusLogs.endTime)
-                ));
+                .where(and(eq(statusLogs.userId, userId), isNull(statusLogs.endTime)))
+                .limit(1);
 
-            const activeLog = activeLogs[0];
+            const now = Date.now();
 
             if (activeLog) {
-                const duration = endTime - activeLog.startTime; // startTime is number (bigint mode)
+                // Prevent redundant updtes
+                if (activeLog.statusName === status) return activeLog;
 
-                await tx
-                    .update(statusLogs)
+                // Close current log
+                await tx.update(statusLogs)
                     .set({
-                        endTime: endTime,
-                        durationMs: duration
+                        endTime: now,
+                        durationMs: now - Number(activeLog.startTime)
                     })
                     .where(eq(statusLogs.id, activeLog.id));
             }
 
-            // 2. Start new log
-            const [newLog] = await tx
-                .insert(statusLogs)
-                .values({
+            if (status !== 'off_duty') {
+                const [newLog] = await tx.insert(statusLogs).values({
                     userId,
                     statusName: status,
-                    startTime: endTime
-                })
-                .returning();
+                    startTime: now,
+                }).returning();
+                return newLog;
+            }
 
-            res.json(newLog);
+            return { message: "Status stopped (Off Duty)", statusName: 'off_duty' };
         });
+
+        return res.json(result);
     } catch (err) {
-        console.error("Change status error:", err);
-        res.status(500).json({ error: "Failed to change status" });
+        console.error("Status transition failure:", err);
+        return res.status(500).json({ error: "State transition failed" });
     }
 };
 
@@ -101,42 +81,6 @@ export const getCurrentStatus = async (req: AuthRequest, res: Response) => {
     }
 };
 
-export const stopStatus = async (req: AuthRequest, res: Response) => {
-    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-    const userId = req.user.id;
-
-    try {
-        const endTime = Date.now();
-
-        const activeLog = await db.query.statusLogs.findFirst({
-            where: and(
-                eq(statusLogs.userId, userId),
-                isNull(statusLogs.endTime)
-            )
-        });
-
-        if (!activeLog) {
-            return res.status(400).json({ error: "No active status to stop" });
-        }
-
-        const duration = endTime - activeLog.startTime;
-
-        await db.update(statusLogs)
-            .set({
-                endTime: endTime,
-                durationMs: duration
-            })
-            .where(eq(statusLogs.id, activeLog.id));
-
-        // Note: Users table update required 'current_status' column which is missing in schema.
-        // Skipping update to users table.
-
-        res.json({ message: "Status stopped successfully", lastLog: { ...activeLog, endTime, durationMs: duration } });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to stop status" });
-    }
-};
 
 export const getHistory = async (req: AuthRequest, res: Response) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });

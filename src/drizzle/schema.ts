@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, unique, serial, bigint, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, unique, serial, bigint, integer, index } from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
     id: text("id").primaryKey(),
@@ -50,4 +50,6 @@ export const statusLogs = pgTable("status_logs", {
     startTime: bigint("start_time", { mode: "number" }).notNull(),
     endTime: bigint("end_time", { mode: "number" }),
     durationMs: integer("duration_ms").default(0),
-});
+}, (table) => [
+    index("start_time_index").on(table.startTime),
+]);

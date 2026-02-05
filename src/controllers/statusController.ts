@@ -85,28 +85,57 @@ export const getCurrentStatus = async (req: AuthRequest, res: Response) => {
 export const getHistory = async (req: AuthRequest, res: Response) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
     const userId = req.user.id;
-    const { from, to } = req.query;
 
     try {
-        const conditions = [eq(statusLogs.userId, userId)];
 
-        if (from) {
-            conditions.push(gte(statusLogs.startTime, Number(from)));
-        }
-        if (to) {
-            conditions.push(lte(statusLogs.startTime, Number(to)));
-        }
+        let page = Number(req.query.page) || 1;
+        let limit = Number(req.query.limit) || 10;
 
-        const logs = await db
+        if (page < 1) page = 1;
+        if (limit < 1) limit = 10;
+        if (limit > 100) limit = 100;
+
+        const skip = (page - 1) * limit;
+
+        const [countResult] = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(statusLogs)
+            .where(eq(statusLogs.userId, userId));
+
+        const totalItems = Number(countResult?.count || 0);
+
+        const historyItems = await db
             .select()
             .from(statusLogs)
-            .where(and(...conditions))
+            .where(eq(statusLogs.userId, userId))
+            .limit(limit)
+            .offset(skip)
             .orderBy(desc(statusLogs.startTime));
 
-        res.json(logs);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Failed to fetch history" });
+        const totalPages = Math.ceil(totalItems / limit);
+
+        const response = {
+            success: true,
+            data: historyItems,
+            pagination: {
+                currentPage: page,
+                totalPages: totalPages,
+                totalItems: totalItems,
+                limit: limit,
+                hasNextPage: page < totalPages,
+                hasPrevPage: page > 1,
+            },
+        };
+
+        res.status(200).json(response);
+    } catch (error) {
+        console.error('Error fetching history:', error);
+
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch history',
+            error: process.env.NODE_ENV === 'development' ? (error as Error).message : undefined,
+        });
     }
 };
 

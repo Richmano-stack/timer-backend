@@ -5,22 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1769262996144,
-      "tag": "0000_abnormal_paibok",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1769267869143,
-      "tag": "0001_illegal_chamber",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1769457486437,
-      "tag": "0002_watery_payback",
+      "when": 1770319907167,
+      "tag": "0000_futuristic_leopardon",
       "breakpoints": true
     }
   ]
